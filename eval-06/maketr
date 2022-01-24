@@ -1,0 +1,56 @@
+#!/bin/sh
+#
+# Example script to make a transaction log file
+# Must be run as root. Remember to chown the file afterwards
+
+# Insert the name of a tarfile here
+tarfile=/home/manfred/git/manfred/nbd-small/data.tar.gz
+tmpnam=$(mktemp)
+tmpmnt=$(echo -n /tmp/mnt-; basename $tmpnam)
+conffile=${tmpnam}.conf
+pidfile=${tmpnam}.pid
+output=`pwd`/output.tr
+
+ulimit -c unlimited
+
+cat >${conffile} <<EOF
+[generic]
+[export1]
+        exportname = $tmpnam
+	transactionlog = $output
+	datalog = true
+        flush = true
+        fua = true
+        rotational = true
+EOF
+nbd-server -C ${conffile} -p ${pidfile}&
+PID=$!
+sleep 1
+dd if=/dev/zero of=${tmpnam} bs=1M count=200
+nbd-client -N export1 127.0.0.1 /dev/nbd0
+mkfs.ext4 /dev/nbd0
+mkdir $tmpmnt
+mount -t ext4 /dev/nbd0 $tmpmnt
+(cd $tmpmnt ; mkdir abc; cd abc; tar xvzf ${tarfile} ; setfacl -R -m u:432:rwx linux-2.2.26/Documentation;cd .. ; (setfacl -R -m u:123:rx abc&); (rm abc -Rf&); tar xvfz ${tarfile};wait;sync) 2>&1 >/dev/null
+dbench -x -D $tmpmnt -t 30 4&
+sleep 3
+(cd $tmpmnt ; mkdir abc; cd abc; tar xvzf ${tarfile} ; setfacl -R -m u:432:rwx linux-2.2.26/Documentation;cd .. ; (setfacl -R -m u:123:rx abc&); (rm abc -Rf&); tar xvfz ${tarfile};wait;sync) 2>&1 >/dev/null
+sleep 20
+killall dbench
+sleep 2
+killall -KILL dbench
+sync
+wait
+sleep 3
+umount $tmpmnt
+nbd-client -d /dev/nbd0
+if [ -f ${pidfile} ]
+then
+        kill `cat ${pidfile}`
+        rm -f ${pidfile}
+else
+        kill $PID
+fi
+rm -f ${conffile}
+ls -la ${output}
+ls -la ${tmpnam}
