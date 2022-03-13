@@ -1,0 +1,1 @@
+Linux localhost.localdomain 5.16.12-200.fc35.x86_64 #1 SMP PREEMPT Wed Mar 2 19:06:17 UTC 2022 x86_64 x86_64 x86_64 GNU/Linux
